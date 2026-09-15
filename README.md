@@ -2,7 +2,17 @@
 
 Terraform provider for [KrakenKey](https://krakenkey.com) — automated TLS certificate management and endpoint monitoring.
 
-> **Status**: Under development. Not yet published to the Terraform Registry.
+> ### ⚠️ Status: planned interface, not yet implemented
+>
+> This repository currently contains **documentation only** — there is no Go source, no `go.mod`, and no released binary. Everything below describes the *intended* provider interface so that the API surface can be reviewed and agreed before implementation starts.
+>
+> Concretely, right now:
+>
+> - The provider is **not** on the Terraform Registry, so `terraform init` cannot resolve `krakenkey/krakenkey`.
+> - The build commands in this README and in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) will not work — there is nothing to build yet.
+> - Resource and attribute names in [docs/RESOURCES.md](docs/RESOURCES.md) are a **design proposal**, not a compatibility promise. Expect them to change during implementation.
+>
+> Until this notice is removed, manage KrakenKey resources with the [CLI](https://github.com/krakenkey/cli), the [GitHub Action](https://github.com/krakenkey/cert-action), or the REST API directly.
 
 ## Requirements
 

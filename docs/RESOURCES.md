@@ -1,5 +1,7 @@
 # Resource and Data Source Reference
 
+> **Design proposal — not implemented.** No provider code exists in this repository yet. This document defines the intended schema so it can be reviewed before implementation; names, types and defaults may change. See the status notice in [README.md](../README.md).
+
 ## Resources
 
 ### `krakenkey_domain`
@@ -65,6 +67,10 @@ Issue and manage a TLS certificate via Let's Encrypt ACME DNS-01.
 | `fingerprint` | string | SHA-256 fingerprint |
 
 > **Note — LE Merkle Tree Certificates (2027)**: Let's Encrypt announced MTC on 2026-06-03. MTC breaks the traditional `chain_pem`/`fullchain_pem` model. Both attributes will be empty for MTC certificates pending provider updates before the LE production rollout (target: 2027).
+
+> **Note — deploy `fullchain_pem`, not `cert_pem`**: write `fullchain_pem` wherever a server expects a certificate file. Clients split on whether they will repair an incomplete chain by fetching the issuing intermediate from the leaf's AIA `caIssuers` URL — Windows Schannel, macOS Security.framework and Chrome do; OpenSSL, Go, Firefox and Java PKIX (by default) do not — so a `cert_pem`-only deployment can pass a browser check and fail in `curl` or a Go service. CA/Browser Forum ballot SC104 (passed 2026-09-03) relaxed AIA from MUST to SHOULD in subscriber certificates, so leaves may eventually carry no `caIssuers` URL at all and chain repair becomes unavailable everywhere.
+
+All three PEM attributes are `Sensitive: true`, so they are redacted in plan output but stored in plain text in Terraform state. Use a remote backend with encryption at rest, or pass the certificate to its destination out of band rather than through state.
 
 #### Example
 
