@@ -36,6 +36,16 @@ resource "krakenkey_domain" "example" {
 output "verification_txt" {
   value = krakenkey_domain.example.txt_record_value
 }
+
+# The ACME delegation record, created with your DNS provider.
+# krakenkey_certificate must depend on this — see the note there.
+resource "cloudflare_record" "acme_delegation" {
+  zone_id = var.cloudflare_zone_id
+  name    = krakenkey_domain.example.cname_record_name
+  type    = "CNAME"
+  content = krakenkey_domain.example.cname_record_value
+  proxied = false
+}
 ```
 
 ---
@@ -43,6 +53,10 @@ output "verification_txt" {
 ### `krakenkey_certificate`
 
 Issue and manage a TLS certificate via Let's Encrypt ACME DNS-01.
+
+> **Ordering matters — the API now rejects issuance before the CNAME exists.** KrakenKey verifies the `_acme-challenge` delegation *before* creating an ACME order, and a missing or misdirected CNAME is a permanent failure, not a retry. In Terraform that record is usually created by a different provider (`cloudflare_record`, `aws_route53_record`) from `krakenkey_domain`'s `cname_record_name` / `cname_record_value`. Terraform has no way to infer that `krakenkey_certificate` depends on that record, so without an explicit `depends_on` it may create the certificate first and fail the apply outright. Previously the same ordering bug surfaced as a slow timeout; now it fails immediately.
+>
+> The implementation should either make this ordering explicit in the documented examples (as below) or have the resource retry on the delegation error rather than failing the apply. Worth deciding before the resource is built.
 
 #### Arguments
 

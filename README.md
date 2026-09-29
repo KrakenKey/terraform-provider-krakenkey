@@ -1,6 +1,6 @@
 # terraform-provider-krakenkey
 
-Terraform provider for [KrakenKey](https://krakenkey.com) — automated TLS certificate management and endpoint monitoring.
+Terraform provider for [KrakenKey](https://krakenkey.io) — automated TLS certificate management and endpoint monitoring.
 
 > ### ⚠️ Status: planned interface, not yet implemented
 >
