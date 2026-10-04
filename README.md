@@ -1,131 +1,108 @@
 # terraform-provider-krakenkey
 
-Terraform provider for [KrakenKey](https://krakenkey.io) — automated TLS certificate management and endpoint monitoring.
+Terraform provider for [KrakenKey](https://krakenkey.io): TLS certificate issuance through Let's Encrypt (ACME DNS-01) and TLS endpoint monitoring.
 
-> ### ⚠️ Status: planned interface, not yet implemented
+> **Status: not implemented.** This repository holds documentation only. There is no Go source, no `go.mod`, no release, and nothing on the Terraform Registry, so `terraform init` cannot install `krakenkey/krakenkey` and the build steps in [CONTRIBUTING.md](CONTRIBUTING.md) have nothing to build.
 >
-> This repository currently contains **documentation only** — there is no Go source, no `go.mod`, and no released binary. Everything below describes the *intended* provider interface so that the API surface can be reviewed and agreed before implementation starts.
+> [DESIGN.md](DESIGN.md) is a proposed schema, checked against the public API. Names, types and behavior can change during implementation and are not a compatibility promise.
 >
-> Concretely, right now:
->
-> - The provider is **not** on the Terraform Registry, so `terraform init` cannot resolve `krakenkey/krakenkey`.
-> - The build commands in this README and in [docs/CONTRIBUTING.md](CONTRIBUTING.md) will not work — there is nothing to build yet.
-> - Resource and attribute names in [docs/RESOURCES.md](DESIGN.md) are a **design proposal**, not a compatibility promise. Expect them to change during implementation.
->
-> Until this notice is removed, manage KrakenKey resources with the [CLI](https://github.com/krakenkey/cli), the [GitHub Action](https://github.com/krakenkey/cert-action), or the REST API directly.
+> Until there is a release, use the [CLI](https://github.com/KrakenKey/cli), the [GitHub Action](https://github.com/KrakenKey/cert-action), or the [REST API](https://krakenkey.io/docs/api/).
 
-## Requirements
+## Planned scope
 
-| Dependency | Version |
-|------------|---------|
-| [Terraform](https://developer.hashicorp.com/terraform) | >= 1.5 |
-| [Go](https://golang.org/) (to build from source) | >= 1.22 |
+The provider wraps the KrakenKey REST API (`https://api.krakenkey.io`). The proposed first version covers:
 
-## Authentication
+| Type | Name | Purpose |
+|------|------|---------|
+| Resource | `krakenkey_domain` | Register a domain and expose the DNS records it needs |
+| Resource | `krakenkey_certificate` | Submit a CSR and wait for the issued certificate |
+| Resource | `krakenkey_endpoint` | Monitor a TLS endpoint |
+| Resource | `krakenkey_endpoint_region` | Add a hosted probe region to an endpoint (Starter plan and above) |
+| Data source | `krakenkey_certificate` | Read a certificate by ID |
+| Data source | `krakenkey_endpoint` | Read an endpoint by ID |
 
-The provider authenticates with the KrakenKey API using an API key. The recommended approach is the environment variable:
+KrakenKey never generates or stores private keys. The certificate resource takes a CSR, so the private key stays wherever you create it (for example the `hashicorp/tls` provider, or a file generated outside Terraform). See [DESIGN.md](DESIGN.md) for each schema, the DNS ordering rules and the open questions.
+
+## Planned authentication
+
+The provider would authenticate with a KrakenKey user API key (`kk_...`), the same key the CLI uses. Create one in the dashboard or with `krakenkey auth login --web`.
 
 ```bash
 export KK_API_KEY=kk_...
 ```
 
-Or configure it in the provider block:
-
 ```hcl
 provider "krakenkey" {
-  api_key = "kk_..."  # prefer KK_API_KEY env var
+  # api_key = "kk_..."                    # or KK_API_KEY
+  # api_url = "https://api.krakenkey.io"  # or KK_API_URL
 }
 ```
 
-## Quick Start
+## Example of the proposed interface
+
+This does not run yet. It shows the intended shape: a domain, its two DNS records, and a certificate for a CSR made with the `hashicorp/tls` provider.
 
 ```hcl
-terraform {
-  required_providers {
-    krakenkey = {
-      source = "krakenkey/krakenkey"
-    }
-  }
-}
-
-provider "krakenkey" {}
-
-# Register a domain
 resource "krakenkey_domain" "example" {
-  name = "example.com"
+  hostname = "example.com"
 }
 
-# Issue a certificate
-resource "krakenkey_certificate" "example" {
-  domain_id   = krakenkey_domain.example.id
-  common_name = "example.com"
-  san         = ["www.example.com"]
-  key_type    = "EC_P256"
+# DNS records come from your DNS provider (Cloudflare shown here).
+resource "cloudflare_record" "kk_verify" {
+  zone_id = var.cloudflare_zone_id
+  name    = krakenkey_domain.example.txt_record_name
+  type    = "TXT"
+  content = krakenkey_domain.example.txt_record_value
 }
 
-# Monitor an endpoint
-resource "krakenkey_endpoint" "example" {
-  host  = "example.com"
-  port  = 443
-  label = "Main site"
+resource "cloudflare_record" "kk_acme" {
+  zone_id = var.cloudflare_zone_id
+  name    = krakenkey_domain.example.cname_record_name
+  type    = "CNAME"
+  content = krakenkey_domain.example.cname_record_value
+  proxied = false
 }
 
-# Add a hosted probe region (Starter tier+)
-resource "krakenkey_endpoint_region" "us_east" {
-  endpoint_id = krakenkey_endpoint.example.id
-  region      = "us-east-1"
+resource "tls_private_key" "web" {
+  algorithm   = "ECDSA"
+  ecdsa_curve = "P256"
 }
-```
 
-## Resources and Data Sources
-
-See [docs/RESOURCES.md](DESIGN.md) for full argument and attribute reference.
-
-**Resources**
-
-| Resource | Description |
-|----------|-------------|
-| `krakenkey_domain` | Register and verify a domain |
-| `krakenkey_certificate` | Issue and manage TLS certificates |
-| `krakenkey_endpoint` | Monitor a TLS endpoint |
-| `krakenkey_endpoint_region` | Add a hosted probe region to an endpoint (Starter tier+) |
-| `krakenkey_api_key` | Create and manage API keys |
-
-**Data Sources**
-
-| Data Source | Description |
-|-------------|-------------|
-| `data.krakenkey_certificate` | Look up a certificate by ID |
-| `data.krakenkey_endpoint` | Look up an endpoint by ID |
-
-## Local Development
-
-```bash
-# Build the provider binary
-go build -o terraform-provider-krakenkey ./...
-
-# Configure Terraform to use the local binary
-cat >> ~/.terraformrc <<'EOF'
-provider_installation {
-  dev_overrides {
-    "krakenkey/krakenkey" = "/path/to/terraform-provider-krakenkey"
+resource "tls_cert_request" "web" {
+  private_key_pem = tls_private_key.web.private_key_pem
+  subject {
+    common_name = "example.com"
   }
-  direct {}
+  dns_names = ["example.com", "www.example.com"]
 }
-EOF
+
+resource "krakenkey_certificate" "web" {
+  csr_pem = tls_cert_request.web.cert_request_pem
+
+  # The API checks domain verification and the _acme-challenge CNAME.
+  # Terraform cannot see that dependency, so state it.
+  depends_on = [cloudflare_record.kk_verify, cloudflare_record.kk_acme]
+}
 ```
 
-See [docs/CONTRIBUTING.md](CONTRIBUTING.md) for full build, test, and release instructions.
+Domain verification also has to happen between the TXT record and the certificate. How the provider triggers it is an open question in [DESIGN.md](DESIGN.md#open-design-questions).
 
-## Related Repositories
+## Contributing
 
-| Repo | Description |
-|------|-------------|
-| [krakenkey/krakenkey](https://github.com/krakenkey/krakenkey) | Monorepo (docs, devcontainer) |
-| [krakenkey/app](https://github.com/krakenkey/app) | NestJS API + React dashboard |
-| [krakenkey/cli](https://github.com/krakenkey/cli) | CLI tool (Go) |
-| [krakenkey/probe](https://github.com/krakenkey/probe) | TLS health probe (Go) |
+See [CONTRIBUTING.md](CONTRIBUTING.md). Implementation work is tracked in this repository's issues.
+
+## Related projects
+
+| Repository | Description |
+|------------|-------------|
+| [KrakenKey/KrakenKey](https://github.com/KrakenKey/KrakenKey) | Monorepo with docs and dev environment |
+| [KrakenKey/app](https://github.com/KrakenKey/app) | NestJS API and React dashboard |
+| [KrakenKey/cli](https://github.com/KrakenKey/cli) | Command line client (Go) |
+| [KrakenKey/cert-action](https://github.com/KrakenKey/cert-action) | GitHub Action for certificates |
+| [KrakenKey/probe](https://github.com/KrakenKey/probe) | TLS endpoint probe (Go) |
+
+Documentation: <https://krakenkey.io/docs/>
 
 ## License
 
-This project is part of [KrakenKey](https://github.com/krakenkey/krakenkey), licensed under the [GNU Affero General Public License v3.0](https://github.com/krakenkey/krakenkey/blob/main/LICENSE).
+No license has been chosen for this repository yet. One will be added before the first release.
