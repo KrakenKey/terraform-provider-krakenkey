@@ -1,6 +1,6 @@
 # Resource and Data Source Reference
 
-> **Design proposal — not implemented.** No provider code exists in this repository yet. This document defines the intended schema so it can be reviewed before implementation; names, types and defaults may change. See the status notice in [README.md](../README.md).
+> **Design proposal — not implemented.** No provider code exists in this repository yet. This document defines the intended schema so it can be reviewed before implementation; names, types and defaults may change. See the status notice in [README.md](README.md).
 
 ## Resources
 

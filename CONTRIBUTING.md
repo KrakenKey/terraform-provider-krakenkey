@@ -1,6 +1,6 @@
 # Contributing
 
-> **Not yet applicable.** This repository contains documentation only — there is no Go module to build or test. The workflow below is the intended one once the provider is scaffolded; the first implementation PR should add `go.mod`, the provider entrypoint, and CI, then remove this notice. See the status notice in [README.md](../README.md).
+> **Not yet applicable.** This repository contains documentation only — there is no Go module to build or test. The workflow below is the intended one once the provider is scaffolded; the first implementation PR should add `go.mod`, the provider entrypoint, and CI, then remove this notice. See the status notice in [README.md](README.md).
 
 ## Prerequisites
 

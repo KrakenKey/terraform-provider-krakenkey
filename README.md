@@ -9,8 +9,8 @@ Terraform provider for [KrakenKey](https://krakenkey.io) — automated TLS certi
 > Concretely, right now:
 >
 > - The provider is **not** on the Terraform Registry, so `terraform init` cannot resolve `krakenkey/krakenkey`.
-> - The build commands in this README and in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) will not work — there is nothing to build yet.
-> - Resource and attribute names in [docs/RESOURCES.md](docs/RESOURCES.md) are a **design proposal**, not a compatibility promise. Expect them to change during implementation.
+> - The build commands in this README and in [docs/CONTRIBUTING.md](CONTRIBUTING.md) will not work — there is nothing to build yet.
+> - Resource and attribute names in [docs/RESOURCES.md](DESIGN.md) are a **design proposal**, not a compatibility promise. Expect them to change during implementation.
 >
 > Until this notice is removed, manage KrakenKey resources with the [CLI](https://github.com/krakenkey/cli), the [GitHub Action](https://github.com/krakenkey/cert-action), or the REST API directly.
 
@@ -79,7 +79,7 @@ resource "krakenkey_endpoint_region" "us_east" {
 
 ## Resources and Data Sources
 
-See [docs/RESOURCES.md](docs/RESOURCES.md) for full argument and attribute reference.
+See [docs/RESOURCES.md](DESIGN.md) for full argument and attribute reference.
 
 **Resources**
 
@@ -115,7 +115,7 @@ provider_installation {
 EOF
 ```
 
-See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for full build, test, and release instructions.
+See [docs/CONTRIBUTING.md](CONTRIBUTING.md) for full build, test, and release instructions.
 
 ## Related Repositories
 
