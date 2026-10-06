@@ -8,5 +8,5 @@ resource "krakenkey_domain_verification" "example" {
     create = "15m"
   }
 
-  depends_on = [cloudflare_record.kk_verify]
+  depends_on = [cloudflare_dns_record.kk_verify]
 }
