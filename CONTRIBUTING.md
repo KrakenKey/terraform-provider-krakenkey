@@ -88,6 +88,16 @@ Planned in #24 and #25: tag `vX.Y.Z`, GoReleaser builds and signs the binaries, 
 - a GPG signing key added to the Registry and to the release workflow,
 - a license file.
 
+## Documentation
+
+The pages in `docs/` are generated from the schema descriptions, `templates/` and `examples/`. Don't edit them by hand. After changing any of those, run:
+
+```bash
+go generate ./...
+```
+
+CI fails if `docs/` is out of date.
+
 ## Releasing
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`. GoReleaser builds the provider for each platform and writes the files the Terraform Registry expects: one zip per platform, `SHA256SUMS`, its detached GPG signature, and the registry manifest.

@@ -24,3 +24,8 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test ./... -count=1
+      - name: Check docs are up to date
+        run: |
+          terraform fmt -check -recursive examples
+          go generate ./...
+          test -z "$(git status --porcelain docs)" || { git status --porcelain docs; echo "Run go generate ./... and commit docs/"; exit 1; }

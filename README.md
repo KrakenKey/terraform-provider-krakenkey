@@ -2,11 +2,22 @@
 
 Terraform provider for [KrakenKey](https://krakenkey.io): TLS certificate issuance through Let's Encrypt (ACME DNS-01) and TLS endpoint monitoring.
 
-> **Status: not released yet.** Every resource and data source below is implemented and tested, but there is no release and nothing on the Terraform Registry, so `terraform init` cannot install `krakenkey/krakenkey` yet. To try a local build, see [CONTRIBUTING.md](CONTRIBUTING.md).
->
-> Names, types and behavior can change before the first release and are not a compatibility promise.
->
-> Until there is a release, use the [CLI](https://github.com/KrakenKey/cli), the [GitHub Action](https://github.com/KrakenKey/cert-action), or the [REST API](https://krakenkey.io/docs/api/).
+## Install
+
+Requires Terraform 1.11 or later (or OpenTofu 1.11 or later) for the write-only arguments used in the examples.
+
+```hcl
+terraform {
+  required_providers {
+    krakenkey = {
+      source  = "krakenkey/krakenkey"
+      version = "~> 0.1"
+    }
+  }
+}
+```
+
+Reference docs for every resource and data source are on the [Terraform Registry](https://registry.terraform.io/providers/krakenkey/krakenkey/latest/docs) and in [`docs/`](docs/). Versions before 1.0 can change names, types and behavior between minor releases; check the release notes before upgrading.
 
 ## Resources and data sources
 
