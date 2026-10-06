@@ -234,7 +234,7 @@ Write-only arguments need Terraform 1.11 or OpenTofu 1.11.
 
 ### Data source `krakenkey_certificate`
 
-Reads a certificate by ID (`GET /certs/tls/:id`). Argument: `id` (string, required). Attributes: the computed attributes of the resource, plus `auto_renew`.
+Reads a certificate by ID (`GET /certs/tls/:id`). Argument: `id` (string, required). Attributes: the computed attributes of the resource, plus `auto_renew` (and `csr_pem`, from the API's `rawCsr`). The PEM attributes and expiry are only set while the certificate is issued, and a missing certificate is an error.
 
 ```hcl
 data "krakenkey_certificate" "existing" {
