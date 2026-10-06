@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -50,10 +51,16 @@ func New(baseURL, apiKey, userAgent string) *Client {
 type APIError struct {
 	StatusCode int
 	Message    string
+	// RetryAfter is set from the Retry-After header on 429 responses.
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("KrakenKey API returned %d: %s", e.StatusCode, e.Message)
+	msg := fmt.Sprintf("KrakenKey API returned %d: %s", e.StatusCode, e.Message)
+	if e.StatusCode == http.StatusTooManyRequests && e.RetryAfter > 0 {
+		msg += fmt.Sprintf(" (rate limited; try again in %s)", e.RetryAfter.Round(time.Minute).String())
+	}
+	return msg
 }
 
 // IsNotFound reports whether err is a 404 from the API.
@@ -151,7 +158,11 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return &APIError{StatusCode: resp.StatusCode, Message: errorMessage(data, resp.Status)}
+		apiErr := &APIError{StatusCode: resp.StatusCode, Message: errorMessage(data, resp.Status)}
+		if secs, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && secs > 0 {
+			apiErr.RetryAfter = time.Duration(secs) * time.Second
+		}
+		return apiErr
 	}
 	if out == nil || len(data) == 0 {
 		return nil

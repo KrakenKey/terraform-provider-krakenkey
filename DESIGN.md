@@ -185,7 +185,7 @@ resource "krakenkey_endpoint" "api" {
 
 ### `krakenkey_endpoint_region`
 
-Adds one hosted probe region to an endpoint. API: `POST /endpoints/:id/regions`, `DELETE /endpoints/:id/regions/:region`, with reads from `GET /endpoints/:id`. Hosted monitoring needs the Starter plan or above, and plan limits on regions and hosted endpoints apply (403 with `code: "plan_limit_exceeded"`).
+Adds one hosted probe region to an endpoint. API: `POST /endpoints/:id/regions`, `DELETE /endpoints/:id/regions/:region`, with reads from `GET /endpoints/:id`. Hosted monitoring needs the Starter plan or above, and plan limits on regions and hosted endpoints apply (an error body with `code: "plan_limit_exceeded"`).
 
 #### Arguments
 
@@ -281,6 +281,14 @@ The provider works with a full-access key. For a scoped key, these are the scope
 | `krakenkey_certificate` | `certs:read`, `certs:issue`; `certs:renew` to change `auto_renew`; `certs:revoke` with `revoke_on_destroy` |
 | `krakenkey_endpoint`, `krakenkey_endpoint_region` | `endpoints:read`, `endpoints:write` |
 | `krakenkey_alert_channel` | `account:read`, `account:write` |
+
+## Errors from the API
+
+Seen against dev on 2026-10-06. The provider passes the API's message through, so these reach the user as written:
+
+- **Missing scope:** 403, `This API key needs the certs:issue scope for this request.`
+- **Certificate, domain and API key plan limits:** 402, for example `Total active certificate limit reached`. Endpoint and region limits use a body with `code: "plan_limit_exceeded"` instead.
+- **Rate limits:** 429 with `Retry-After` in seconds. Issuance, renewal, retry, revocation and domain verification share the hourly "expensive" bucket (5 an hour on Free), so a plan that creates and replaces several certificates can run out mid-apply. The provider adds the retry time to the error rather than waiting, since the wait can be close to an hour.
 
 ## Open design questions
 
