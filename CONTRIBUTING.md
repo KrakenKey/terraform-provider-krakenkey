@@ -1,10 +1,12 @@
 # Contributing
 
-> **Not yet applicable.** There is no Go module here yet, so none of the commands below work. They describe the planned workflow. The first implementation PR should add `go.mod`, the provider entry point and CI (issues #1, #2 and #5), then update this file. See the status notice in [README.md](README.md).
+## Layout
 
-## Planned layout
+The provider uses `terraform-plugin-framework`, with the module path `github.com/krakenkey/terraform-provider-krakenkey` (lowercase, like the CLI).
 
-The plan in #1 is to start from HashiCorp's [terraform-provider-scaffolding-framework](https://github.com/hashicorp/terraform-provider-scaffolding-framework) template, using `terraform-plugin-framework`, with the module path `github.com/KrakenKey/terraform-provider-krakenkey`. The Go and Terraform versions will be whatever that template and `go.mod` require at the time.
+- `internal/client`: the KrakenKey API client.
+- `internal/provider`: the provider and its resources. Tests drive real Terraform against an in-process fake API, so they need the `terraform` binary on `PATH` (or `TF_ACC_TERRAFORM_PATH`) but no credentials.
+- `prototype/option-b`: the write-only private key prototype from DESIGN.md.
 
 ## Build
 
@@ -12,9 +14,9 @@ The plan in #1 is to start from HashiCorp's [terraform-provider-scaffolding-fram
 go build -o terraform-provider-krakenkey .
 ```
 
-## Unit tests
+## Tests
 
-Unit tests need no credentials:
+The tests need Terraform 1.11 or later and no credentials:
 
 ```bash
 go test ./...
@@ -47,6 +49,28 @@ provider_installation {
 ```
 
 With `dev_overrides` set, run `terraform plan` directly. Skip `terraform init` for the overridden provider.
+
+That only works when `krakenkey/krakenkey` is the only provider. If the configuration also uses others (`tls`, `vault`, a DNS provider), `terraform init` still tries to look up `krakenkey/krakenkey` in the registry and fails. Use a filesystem mirror instead:
+
+```bash
+mkdir -p ~/tf-mirror/registry.terraform.io/krakenkey/krakenkey/0.0.1/linux_amd64
+go build -o ~/tf-mirror/registry.terraform.io/krakenkey/krakenkey/0.0.1/linux_amd64/terraform-provider-krakenkey_v0.0.1 .
+```
+
+```hcl
+# ~/.terraformrc
+provider_installation {
+  filesystem_mirror {
+    path    = "/home/you/tf-mirror"
+    include = ["krakenkey/krakenkey"]
+  }
+  direct {
+    exclude = ["krakenkey/krakenkey"]
+  }
+}
+```
+
+After a rebuild, delete `.terraform.lock.hcl` and run `terraform init` again, since the binary's checksum changes.
 
 ## Code style
 
