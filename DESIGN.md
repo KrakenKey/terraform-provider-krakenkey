@@ -215,18 +215,27 @@ resource "krakenkey_endpoint_region" "us" {
 
 ### `krakenkey_alert_channel`
 
-A Slack, Teams or signed-webhook channel for alerts. API: `GET/POST /notifications/channels`, `PATCH/DELETE /notifications/channels/:id`. Needs a key with the `account:write` scope.
+A Slack, Teams or signed-webhook channel for alerts. API: `GET/POST /notifications/channels`, `PATCH/DELETE /notifications/channels/:id`. Needs a key with the `account:read` and `account:write` scopes. Keys limited to specific domains or certificates get a 403: a channel receives alerts for the whole account.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `type` | string | yes | `slack`, `teams` or `webhook`. Forces a new resource. |
-| `name` | string | yes | Display name, up to 100 characters. |
+| `name` | string | yes | Display name, up to 100 characters. The API trims surrounding whitespace, so the provider rejects it at plan time. |
 | `url_wo` | string, write-only | yes | Incoming webhook URL. The URL is a credential and the API only returns it masked, so the provider never stores it. |
-| `url_wo_version` | number | yes | Bump to send a new URL. |
-| `events` | set of strings | no | Events to send. Defaults to the API's default set. |
+| `url_wo_version` | number | yes | Change it to send a new URL. |
+| `events` | set of strings | no | Events to send. Defaults to the API's default set (`cert.failed`, `cert.expiring`, `cert.revoked`, `cert.replacement_requested`, `domain.verification_failed`, `endpoint.scan_failed`). An empty set is allowed and sends nothing. |
 | `enabled` | bool | no | Default `true`. |
 
-Computed: `id`, `url_masked`. For `webhook` channels the API returns the signing secret once, on create. The provider exposes it as a sensitive `signing_secret` attribute, so it is in state; the receiver needs it, and it can be rotated in the dashboard. Rotating it from Terraform is left out because every run would rotate it.
+Computed: `id`, `url_masked` (scheme, host and the last 4 characters of the URL). For `webhook` channels the API returns the signing secret once, on create. The provider exposes it as a sensitive `signing_secret` attribute, so it is in state; the receiver needs it, and it can be rotated in the dashboard. Rotating it from Terraform is left out because every run would rotate it, and a secret rotated in the dashboard is not reflected in state.
+
+How the provider maps to the API:
+
+- There is no `GET /notifications/channels/:id`. Read lists the account's channels and looks for the ID; a channel missing from the list is removed from state.
+- `PATCH` accepts `url`, so a new URL is an in-place update. The provider sends `url` only when `url_wo_version` changes; changing `url_wo` alone plans nothing, because Terraform does not diff write-only values. `name`, `events` and `enabled` are sent on every update.
+- `type` and `events` are checked at plan time against the API's lists. URL rules (Slack must be `https://hooks.slack.com/services/...`, Teams must be a Workflows URL, webhooks must use https and resolve to public addresses) are left to the API, whose 400 message is passed through.
+- An account can have at most 10 channels. Creating an eleventh returns 400.
+
+Import: by channel UUID. `url_wo` cannot be imported, and state has no `url_wo_version` afterwards, so the first apply after an import sends the configured URL once. `signing_secret` is null after import.
 
 Write-only arguments need Terraform 1.11 or OpenTofu 1.11.
 

@@ -96,6 +96,7 @@ func (p *krakenkeyProvider) Resources(_ context.Context) []func() resource.Resou
 		NewCertificateResource,
 		NewEndpointResource,
 		NewEndpointRegionResource,
+		NewAlertChannelResource,
 	}
 }
 
