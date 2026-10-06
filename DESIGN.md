@@ -170,7 +170,11 @@ Monitors a TLS endpoint. API: `POST /endpoints`, `GET /endpoints/:id`, `PATCH /e
 | `id` | string | Endpoint UUID |
 | `created_at` | string | RFC 3339 timestamp |
 
-`POST /endpoints` is an upsert on `host` and `port`: if the account already has that pair, the API returns the existing endpoint instead of creating one. The resource should detect that (or check first) so two configurations do not silently share and then delete the same endpoint.
+`POST /endpoints` is an upsert on `host` and `port`: if the account already has that pair, the API returns the existing endpoint, overwrites its `label` and `sni`, and skips the plan limit check. The create response looks like a fresh endpoint, and `createdAt` can't be compared reliably against the local clock. So create lists endpoints first (`GET /endpoints`) and fails with an error that names the existing endpoint's UUID and tells the user to import it, without calling `POST`. Two applies racing on the same pair could still slip past the check; the window is one request.
+
+For an organization member the list covers the whole organization, which matches what the upsert does.
+
+`PATCH` accepts `sni`, `label` and `isActive` (it also takes `probeIds` and `hostedRegions`, which this resource does not send). A `label` or `sni` removed from the configuration is sent as `null`, which clears it. The server never fills in `sni` itself, so both are plain optional arguments.
 
 Import: by endpoint UUID.
 
@@ -195,6 +199,8 @@ Adds one hosted probe region to an endpoint. API: `POST /endpoints/:id/regions`,
 | `region` | string | yes | Region identifier, e.g. `us-east-1`. Forces a new resource. |
 
 The API does not publish a list of valid regions; it accepts any string up to 50 characters. Plan-time validation would need a published list first.
+
+`POST /endpoints/:id/regions` is idempotent: adding a region the endpoint already has returns success. Create therefore reads the endpoint first and refuses with an import hint if the region is there, for the same reason as the endpoint upsert. Read removes the resource from state when the endpoint or the region is gone. Removing a region that is already gone (404) is not an error on destroy.
 
 `id` is `<endpoint_id>/<region>`, which is also the import format.
 
@@ -237,7 +243,7 @@ Write-only arguments need Terraform 1.11 or OpenTofu 1.11.
 
 ### Data source `krakenkey_certificate`
 
-Reads a certificate by ID (`GET /certs/tls/:id`). Argument: `id` (string, required). Attributes: the computed attributes of the resource, plus `auto_renew`.
+Reads a certificate by ID (`GET /certs/tls/:id`). Argument: `id` (string, required). Attributes: the computed attributes of the resource, plus `auto_renew` (and `csr_pem`, from the API's `rawCsr`). The PEM attributes and expiry are only set while the certificate is issued, and a missing certificate is an error.
 
 ```hcl
 data "krakenkey_certificate" "existing" {
@@ -296,7 +302,7 @@ The provider works with a full-access key. For a scoped key, these are the scope
 Seen against the staging API on 2026-10-06. The provider passes the API's message through, so these reach the user as written:
 
 - **Missing scope:** 403, `This API key needs the certs:issue scope for this request.`
-- **Certificate, domain and API key plan limits:** 402, for example `Total active certificate limit reached`. Endpoint and region limits use a body with `code: "plan_limit_exceeded"` instead.
+- **Certificate, domain and API key plan limits:** 402, for example `Total active certificate limit reached`. Endpoint and region limits return 403 with a body that has `code: "plan_limit_exceeded"` (plus `limit`, `current` and `plan`, except for plans without hosted monitoring, which omit `limit` and `current`). The provider appends them to the message, for example `Endpoint limit reached (limit 3, in use 3, plan free)`.
 - **Rate limits:** 429 with `Retry-After` in seconds. Issuance, renewal, retry, revocation and domain verification share the hourly "expensive" bucket (5 an hour on Free), so a plan that creates and replaces several certificates can run out mid-apply. The provider adds the retry time to the error rather than waiting, since the wait can be close to an hour.
 
 ## Open design questions
