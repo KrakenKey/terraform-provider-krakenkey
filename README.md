@@ -2,9 +2,9 @@
 
 Terraform provider for [KrakenKey](https://krakenkey.io): TLS certificate issuance through Let's Encrypt (ACME DNS-01) and TLS endpoint monitoring.
 
-> **Status: not implemented.** This repository holds documentation only. There is no Go source, no `go.mod`, no release, and nothing on the Terraform Registry, so `terraform init` cannot install `krakenkey/krakenkey` and the build steps in [CONTRIBUTING.md](CONTRIBUTING.md) have nothing to build.
+> **Status: in progress, not released.** `krakenkey_certificate` is implemented and tested; the other resources in [DESIGN.md](DESIGN.md) are not built yet. There is no release and nothing on the Terraform Registry, so `terraform init` cannot install `krakenkey/krakenkey` yet. To try a local build, see [CONTRIBUTING.md](CONTRIBUTING.md).
 >
-> [DESIGN.md](DESIGN.md) is a proposed schema, checked against the public API. Names, types and behavior can change during implementation and are not a compatibility promise.
+> Names, types and behavior can change before the first release and are not a compatibility promise.
 >
 > Until there is a release, use the [CLI](https://github.com/KrakenKey/cli), the [GitHub Action](https://github.com/KrakenKey/cert-action), or the [REST API](https://krakenkey.io/docs/api/).
 
@@ -40,7 +40,7 @@ provider "krakenkey" {
 
 ## Example of the proposed interface
 
-This does not run yet. It shows the intended shape: a domain, its two DNS records, and a certificate for a CSR made with the `hashicorp/tls` provider.
+Only `krakenkey_certificate` exists so far; the domain resources are planned. This shows the intended shape: a domain, its two DNS records, and a certificate for a CSR made with the `hashicorp/tls` provider. The private key is ephemeral and never written to state; [DESIGN.md](DESIGN.md#private-keys) covers where to keep it.
 
 ```hcl
 resource "krakenkey_domain" "example" {
@@ -63,13 +63,16 @@ resource "cloudflare_record" "kk_acme" {
   proxied = false
 }
 
-resource "tls_private_key" "web" {
+ephemeral "tls_private_key" "web" {
   algorithm   = "ECDSA"
   ecdsa_curve = "P256"
 }
 
+# Hand the same key to your secret store with its write-only argument and the
+# same version; see prototype/option-b.
 resource "tls_cert_request" "web" {
-  private_key_pem = tls_private_key.web.private_key_pem
+  private_key_pem_wo         = ephemeral.tls_private_key.web.private_key_pem
+  private_key_pem_wo_version = 1
   subject {
     common_name = "example.com"
   }
@@ -81,11 +84,16 @@ resource "krakenkey_certificate" "web" {
 
   # The API checks domain verification and the _acme-challenge CNAME.
   # Terraform cannot see that dependency, so state it.
-  depends_on = [cloudflare_record.kk_verify, cloudflare_record.kk_acme]
+  depends_on = [krakenkey_domain_verification.example, cloudflare_record.kk_acme]
+}
+
+resource "krakenkey_domain_verification" "example" {
+  domain_id  = krakenkey_domain.example.id
+  depends_on = [cloudflare_record.kk_verify]
 }
 ```
 
-Domain verification also has to happen between the TXT record and the certificate. How the provider triggers it is an open question in [DESIGN.md](DESIGN.md#open-design-questions).
+Destroying a certificate keeps it valid in KrakenKey unless `revoke_on_destroy = true`. KrakenKey renews it on the server; how the renewed certificate reaches your servers is covered in [DESIGN.md](DESIGN.md#renewal-delivery).
 
 ## Contributing
 
@@ -105,4 +113,4 @@ Documentation: <https://krakenkey.io/docs/>
 
 ## License
 
-No license has been chosen for this repository yet. One will be added before the first release.
+[Mozilla Public License 2.0](LICENSE), the license used by HashiCorp's provider libraries and most Terraform providers.

@@ -1,0 +1,8 @@
+/terraform-provider-krakenkey
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+tf.plan
+plan.json
