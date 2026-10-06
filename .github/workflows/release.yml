@@ -1,0 +1,46 @@
+# Builds and signs a release when a v* tag is pushed. The "release"
+# environment holds the signing subkey (GPG_PRIVATE_KEY, a subkey-only
+# export), its passphrase (GPG_PASSPHRASE) and the subkey fingerprint
+# (GPG_SIGNING_SUBKEY). It holds nothing else, so this repository can only
+# ever reach the one key it signs with.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Import the signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_SIGNING_SUBKEY: ${{ vars.GPG_SIGNING_SUBKEY }}
+          GNUPGHOME: ${{ runner.temp }}/gnupg
+        run: scripts/import-signing-key.sh
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_SIGNING_SUBKEY: ${{ vars.GPG_SIGNING_SUBKEY }}
+          GNUPGHOME: ${{ runner.temp }}/gnupg
