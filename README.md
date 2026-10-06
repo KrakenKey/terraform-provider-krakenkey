@@ -113,4 +113,4 @@ Documentation: <https://krakenkey.io/docs/>
 
 ## License
 
-No license has been chosen for this repository yet. One will be added before the first release.
+[Mozilla Public License 2.0](LICENSE), the license used by HashiCorp's provider libraries and most Terraform providers.
