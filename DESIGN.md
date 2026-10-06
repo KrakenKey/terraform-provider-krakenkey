@@ -179,7 +179,11 @@ Monitors a TLS endpoint. API: `POST /endpoints`, `GET /endpoints/:id`, `PATCH /e
 | `id` | string | Endpoint UUID |
 | `created_at` | string | RFC 3339 timestamp |
 
-`POST /endpoints` is an upsert on `host` and `port`: if the account already has that pair, the API returns the existing endpoint instead of creating one. The resource should detect that (or check first) so two configurations do not silently share and then delete the same endpoint.
+`POST /endpoints` is an upsert on `host` and `port`: if the account already has that pair, the API returns the existing endpoint, overwrites its `label` and `sni`, and skips the plan limit check. The create response looks like a fresh endpoint, and `createdAt` can't be compared reliably against the local clock. So create lists endpoints first (`GET /endpoints`) and fails with an error that names the existing endpoint's UUID and tells the user to import it, without calling `POST`. Two applies racing on the same pair could still slip past the check; the window is one request.
+
+For an organization member the list covers the whole organization, which matches what the upsert does.
+
+`PATCH` accepts `sni`, `label` and `isActive` (it also takes `probeIds` and `hostedRegions`, which this resource does not send). A `label` or `sni` removed from the configuration is sent as `null`, which clears it. The server never fills in `sni` itself, so both are plain optional arguments.
 
 Import: by endpoint UUID.
 
@@ -205,6 +209,8 @@ Adds one hosted probe region to an endpoint. API: `POST /endpoints/:id/regions`,
 
 The API does not publish a list of valid regions; it accepts any string up to 50 characters. Plan-time validation would need a published list first.
 
+`POST /endpoints/:id/regions` is idempotent: adding a region the endpoint already has returns success. Create therefore reads the endpoint first and refuses with an import hint if the region is there, for the same reason as the endpoint upsert. Read removes the resource from state when the endpoint or the region is gone. Removing a region that is already gone (404) is not an error on destroy.
+
 `id` is `<endpoint_id>/<region>`, which is also the import format.
 
 The endpoint API can also set regions in bulk (`hostedRegions` on create and update, where update replaces the whole list). `krakenkey_endpoint` should not expose that field, or the two resources will undo each other's changes.
@@ -218,18 +224,27 @@ resource "krakenkey_endpoint_region" "us" {
 
 ### `krakenkey_alert_channel`
 
-A Slack, Teams or signed-webhook channel for alerts. API: `GET/POST /notifications/channels`, `PATCH/DELETE /notifications/channels/:id`. Needs a key with the `account:write` scope.
+A Slack, Teams or signed-webhook channel for alerts. API: `GET/POST /notifications/channels`, `PATCH/DELETE /notifications/channels/:id`. Needs a key with the `account:read` and `account:write` scopes. Keys limited to specific domains or certificates get a 403: a channel receives alerts for the whole account.
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
 | `type` | string | yes | `slack`, `teams` or `webhook`. Forces a new resource. |
-| `name` | string | yes | Display name, up to 100 characters. |
+| `name` | string | yes | Display name, up to 100 characters. The API trims surrounding whitespace, so the provider rejects it at plan time. |
 | `url_wo` | string, write-only | yes | Incoming webhook URL. The URL is a credential and the API only returns it masked, so the provider never stores it. |
-| `url_wo_version` | number | yes | Bump to send a new URL. |
-| `events` | set of strings | no | Events to send. Defaults to the API's default set. |
+| `url_wo_version` | number | yes | Change it to send a new URL. |
+| `events` | set of strings | no | Events to send. Defaults to the API's default set (`cert.failed`, `cert.expiring`, `cert.revoked`, `cert.replacement_requested`, `domain.verification_failed`, `endpoint.scan_failed`). An empty set is allowed and sends nothing. |
 | `enabled` | bool | no | Default `true`. |
 
-Computed: `id`, `url_masked`. For `webhook` channels the API returns the signing secret once, on create. The provider exposes it as a sensitive `signing_secret` attribute, so it is in state; the receiver needs it, and it can be rotated in the dashboard. Rotating it from Terraform is left out because every run would rotate it.
+Computed: `id`, `url_masked` (scheme, host and the last 4 characters of the URL). For `webhook` channels the API returns the signing secret once, on create. The provider exposes it as a sensitive `signing_secret` attribute, so it is in state; the receiver needs it, and it can be rotated in the dashboard. Rotating it from Terraform is left out because every run would rotate it, and a secret rotated in the dashboard is not reflected in state.
+
+How the provider maps to the API:
+
+- There is no `GET /notifications/channels/:id`. Read lists the account's channels and looks for the ID; a channel missing from the list is removed from state.
+- `PATCH` accepts `url`, so a new URL is an in-place update. The provider sends `url` only when `url_wo_version` changes; changing `url_wo` alone plans nothing, because Terraform does not diff write-only values. `name`, `events` and `enabled` are sent on every update.
+- `type` and `events` are checked at plan time against the API's lists. URL rules (Slack must be `https://hooks.slack.com/services/...`, Teams must be a Workflows URL, webhooks must use https and resolve to public addresses) are left to the API, whose 400 message is passed through.
+- An account can have at most 10 channels. Creating an eleventh returns 400.
+
+Import: by channel UUID. `url_wo` cannot be imported, and state has no `url_wo_version` afterwards, so the first apply after an import sends the configured URL once. `signing_secret` is null after import.
 
 Write-only arguments need Terraform 1.11 or OpenTofu 1.11.
 
@@ -237,7 +252,7 @@ Write-only arguments need Terraform 1.11 or OpenTofu 1.11.
 
 ### Data source `krakenkey_certificate`
 
-Reads a certificate by ID (`GET /certs/tls/:id`). Argument: `id` (string, required). Attributes: the computed attributes of the resource, plus `auto_renew`.
+Reads a certificate by ID (`GET /certs/tls/:id`). Argument: `id` (string, required). Attributes: the computed attributes of the resource, plus `auto_renew` (and `csr_pem`, from the API's `rawCsr`). The PEM attributes and expiry are only set while the certificate is issued, and a missing certificate is an error.
 
 ```hcl
 data "krakenkey_certificate" "existing" {
@@ -296,7 +311,7 @@ The provider works with a full-access key. For a scoped key, these are the scope
 Seen against the staging API on 2026-10-06. The provider passes the API's message through, so these reach the user as written:
 
 - **Missing scope:** 403, `This API key needs the certs:issue scope for this request.`
-- **Certificate, domain and API key plan limits:** 402, for example `Total active certificate limit reached`. Endpoint and region limits use a body with `code: "plan_limit_exceeded"` instead.
+- **Certificate, domain and API key plan limits:** 402, for example `Total active certificate limit reached`. Endpoint and region limits return 403 with a body that has `code: "plan_limit_exceeded"` (plus `limit`, `current` and `plan`, except for plans without hosted monitoring, which omit `limit` and `current`). The provider appends them to the message, for example `Endpoint limit reached (limit 3, in use 3, plan free)`.
 - **Rate limits:** 429 with `Retry-After` in seconds. Issuance, renewal, retry, revocation and domain verification share the hourly "expensive" bucket (5 an hour on Free), so a plan that creates and replaces several certificates can run out mid-apply. The provider adds the retry time to the error rather than waiting, since the wait can be close to an hour.
 
 ## Open design questions

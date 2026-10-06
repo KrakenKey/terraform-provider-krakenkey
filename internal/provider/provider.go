@@ -103,11 +103,17 @@ func (p *krakenkeyProvider) Configure(ctx context.Context, req provider.Configur
 func (p *krakenkeyProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewCertificateResource,
+		NewEndpointResource,
+		NewEndpointRegionResource,
+		NewAlertChannelResource,
 		NewDomainResource,
 		NewDomainVerificationResource,
 	}
 }
 
 func (p *krakenkeyProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		NewCertificateDataSource,
+		NewEndpointDataSource,
+	}
 }

@@ -159,6 +159,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		apiErr := &APIError{StatusCode: resp.StatusCode, Message: errorMessage(data, resp.Status)}
+		addErrorDetails(apiErr, data)
 		if secs, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && secs > 0 {
 			apiErr.RetryAfter = time.Duration(secs) * time.Second
 		}
