@@ -318,6 +318,20 @@ func TestEndpoint_lifecycle(t *testing.T) {
 				),
 			},
 			{
+				// Removing sni sends null and clears it on the server.
+				Config: endpointConfig(srv.URL, `host = "example.com"`),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(endpointRes, "id", "ep-1"),
+					resource.TestCheckNoResourceAttr(endpointRes, "sni"),
+					func(*terraform.State) error {
+						if e := api.endpoint("ep-1"); e == nil || e.SNI != nil {
+							return fmt.Errorf("sni should be cleared, got %+v", e)
+						}
+						return nil
+					},
+				),
+			},
+			{
 				// A change to host or port replaces the endpoint.
 				Config: endpointConfig(srv.URL, `host = "example.com"
   port = 8443`),

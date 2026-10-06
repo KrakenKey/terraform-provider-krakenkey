@@ -174,7 +174,7 @@ Monitors a TLS endpoint. API: `POST /endpoints`, `GET /endpoints/:id`, `PATCH /e
 
 For an organization member the list covers the whole organization, which matches what the upsert does.
 
-`PATCH` accepts `sni`, `label` and `isActive` (it also takes `probeIds` and `hostedRegions`, which this resource does not send). A `label` removed from the configuration is sent as `null`, which clears it. `sni` is optional and computed, so removing it from the configuration keeps the current server value.
+`PATCH` accepts `sni`, `label` and `isActive` (it also takes `probeIds` and `hostedRegions`, which this resource does not send). A `label` or `sni` removed from the configuration is sent as `null`, which clears it. The server never fills in `sni` itself, so both are plain optional arguments.
 
 Import: by endpoint UUID.
 

@@ -72,10 +72,8 @@ func (r *endpointResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"sni": schema.StringAttribute{
-				Description:   "SNI override. KrakenKey uses host when it is not set.",
-				Optional:      true,
-				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				Description: "SNI override. KrakenKey uses host when it is not set. Removing it clears the override.",
+				Optional:    true,
 			},
 			"label": schema.StringAttribute{
 				Description: "Display label, up to 100 characters.",
@@ -185,7 +183,7 @@ func (r *endpointResource) Update(ctx context.Context, req resource.UpdateReques
 	// Only host and port are immutable, and they force replacement, so the
 	// remaining differences can all go in one PATCH. A null label clears it.
 	fields := map[string]any{}
-	if !plan.SNI.Equal(state.SNI) && !plan.SNI.IsUnknown() {
+	if !plan.SNI.Equal(state.SNI) {
 		fields["sni"] = optionalString(plan.SNI)
 	}
 	if !plan.Label.Equal(state.Label) {
@@ -203,7 +201,7 @@ func (r *endpointResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 		applyEndpoint(ep, &plan)
 	} else {
-		plan.SNI, plan.CreatedAt = state.SNI, state.CreatedAt
+		plan.CreatedAt = state.CreatedAt
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
