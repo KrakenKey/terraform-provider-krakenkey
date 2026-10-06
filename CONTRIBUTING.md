@@ -92,7 +92,7 @@ Planned in #24 and #25: tag `vX.Y.Z`, GoReleaser builds and signs the binaries, 
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`. GoReleaser builds the provider for each platform and writes the files the Terraform Registry expects: one zip per platform, `SHA256SUMS`, its detached GPG signature, and the registry manifest.
 
-The checksums are signed with a dedicated signing subkey of the KrakenKey release key. The workflow loads the subkey from a secret store into a throwaway keyring (`scripts/import-signing-key.sh`), and refuses to run if the export includes the primary secret key. The public key registered with the Terraform Registry contains only this subkey.
+The checksums are signed with a dedicated signing subkey of the KrakenKey release key. The `release` environment holds only that subkey and its passphrase. The workflow imports it into a throwaway keyring (`scripts/import-signing-key.sh`) and refuses to run if the export includes the primary secret key. The public key registered with the Terraform Registry contains only this subkey.
 
 To check the build and signing locally without publishing, import any test key into an empty `GNUPGHOME` and run:
 
