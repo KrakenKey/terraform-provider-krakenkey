@@ -1,6 +1,6 @@
-# Provider design proposal
+# Provider design
 
-> **In progress.** `krakenkey_certificate` is implemented and tested against a fake API; the other resources are still proposals. Nothing is released yet. See the status notice in [README.md](README.md).
+> **Implemented, not released.** Every resource and data source described here is built and tested against a fake API, and `krakenkey_certificate` has also been run against the staging API. Nothing is released yet. See the status notice in [README.md](README.md).
 
 ## v1 decisions (2026-10-06)
 
@@ -9,7 +9,7 @@
 - **The provider never generates or holds private keys.** Keys come from wherever the user makes them; see [Private keys](#private-keys). Option B (Terraform creates the key and hands it to a secret store without writing it to state) was prototyped and works; see [`prototype/option-b`](prototype/option-b/).
 - **Terraform is not the renewal scheduler.** KrakenKey renews on the server. How the renewed certificate reaches the thing serving it has to be explicit; see [Renewal delivery](#renewal-delivery).
 
-Each resource below maps to endpoints in the public KrakenKey API (`https://api.krakenkey.io/swagger-json`, rendered at <https://krakenkey.io/docs/api/>). The design only proposes attributes that the API can back. Where the API needs a decision from the provider, it is listed under [Open design questions](#open-design-questions).
+Each resource below maps to endpoints in the public KrakenKey API (`https://api.krakenkey.io/swagger-json`, rendered at <https://krakenkey.io/docs/api/>). The design only uses attributes that the API can back. Where the API needs a decision from the provider, it is listed under [Open design questions](#open-design-questions).
 
 ## Provider configuration
 
@@ -98,7 +98,7 @@ Import: by domain UUID.
 ```hcl
 resource "krakenkey_domain_verification" "example" {
   domain_id  = krakenkey_domain.example.id
-  depends_on = [cloudflare_record.kk_verify]
+  depends_on = [cloudflare_dns_record.kk_verify]
 }
 ```
 
@@ -123,7 +123,7 @@ KrakenKey takes a CSR, not key parameters, and never sees the private key. The n
 
 | Attribute | Type | Source | Description |
 |-----------|------|--------|-------------|
-| `id` | string | API | Certificate ID. The API uses a number; the provider would store it as a string. |
+| `id` | string | API | Certificate ID. The API uses a number; the provider stores it as a string. |
 | `status` | string | API | `pending`, `issuing`, `issued`, `failed`, `renewing`, `revoking` or `revoked` |
 | `failure_reason` | string | API `failureReason` | Why the last issuance or renewal failed, if it did |
 | `cert_pem` | string | API `crtPem` | Leaf certificate |
@@ -150,7 +150,7 @@ resource "krakenkey_certificate" "web" {
   csr_pem    = tls_cert_request.web.cert_request_pem
   auto_renew = true
 
-  depends_on = [cloudflare_record.kk_verify, cloudflare_record.kk_acme]
+  depends_on = [cloudflare_dns_record.kk_verify, cloudflare_dns_record.kk_acme]
 }
 ```
 
@@ -330,4 +330,4 @@ Several issues in this repository (#2, #3, #7, #10, #13, #14, #18, #19) were wri
 - The API never returns a private key (`private_key_pem`), and it supports Let's Encrypt only (no `cert_provider`, no OV or EV `type`).
 - Certificate status values are the seven listed above, not `active` or `expired`.
 - There is no lookup of a certificate by domain name; that would mean listing all certificates and filtering by the CSR's names.
-- The API key env var in #2 is `KRAKENKEY_API_KEY`; this proposal uses `KK_API_KEY` to match the CLI.
+- The API key env var in #2 is `KRAKENKEY_API_KEY`; the provider uses `KK_API_KEY` to match the CLI.
