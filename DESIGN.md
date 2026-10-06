@@ -17,6 +17,7 @@ Each resource below maps to endpoints in the public KrakenKey API (`https://api.
 |----------|------|----------|---------|-------------|
 | `api_key` | string, sensitive | yes, unless the env var is set | `KK_API_KEY` | User API key (`kk_...`) |
 | `api_url` | string | no | `KK_API_URL` | API base URL. Default `https://api.krakenkey.io` |
+| `acme_zone` | string | no | | Zone the `_acme-challenge` CNAME points into. Derived from `api_url` by default; see [`krakenkey_domain`](#krakenkey_domain). |
 
 The env var names match the KrakenKey CLI. Requests use `Authorization: Bearer <api_key>`.
 
@@ -49,7 +50,7 @@ Registers a domain. API: `POST /domains`, `GET /domains/:id`, `DELETE /domains/:
 
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `hostname` | string | yes | Domain name, e.g. `example.com`. Changing it forces a new resource. |
+| `hostname` | string | yes | Domain name, e.g. `example.com`. Lowercase, no wildcard, no trailing dot. Changing it forces a new resource. |
 
 #### Attributes
 
@@ -61,10 +62,16 @@ Registers a domain. API: `POST /domains`, `GET /domains/:id`, `DELETE /domains/:
 | `txt_record_name` | string | provider | Same as `hostname`; the TXT record goes on the hostname itself |
 | `txt_record_value` | string | provider | Same as `verification_code` |
 | `cname_record_name` | string | provider | `_acme-challenge.<hostname>` |
-| `cname_record_value` | string | provider | `<hostname with dots replaced by dashes>.acme.krakenkey.io`, e.g. `example-com.acme.krakenkey.io` |
+| `cname_record_value` | string | provider | `<hostname with dots replaced by dashes>.<acme_zone>`, e.g. `example-com.acme.krakenkey.io` |
 | `created_at` | string | API | RFC 3339 timestamp |
 
-The API does not return the record names or the CNAME target. The provider would derive them. The `acme.krakenkey.io` zone is a server setting and differs on non-production API URLs, so the implementation needs a way to get the right zone when `api_url` is not the default.
+The API does not return the record names or the CNAME target, so the provider derives them. The target zone is a server setting (`KK_ACME_AUTH_ZONE_DOMAIN`) that the API does not expose. The provider picks it from `api_url`: `acme.dev.krakenkey.io` for the staging API at `https://api-dev.krakenkey.io`, and `acme.krakenkey.io` for everything else. The provider argument `acme_zone` overrides it for any other KrakenKey server. The CNAME name and target are lowercase, matching the check the issuance job makes.
+
+The API matches hostnames exactly and does not lowercase them, so `Example.com` and `example.com` would be two domains. The provider rejects uppercase, wildcard (`*.example.com`) and trailing-dot hostnames at plan time. A verified domain already covers its subdomains and wildcards.
+
+`POST /domains` returns the existing domain when the account already has the hostname. Create lists the domains first and fails with an import hint if the returned ID was already there, so two configurations cannot share one domain and later delete it from under each other.
+
+Destroy calls `DELETE /domains/:id`, which the API allows at any time. Certificates are not linked to a domain record: they stay valid and keep auto-renewing (renewal checks the CNAME, not the domain). New certificates for those names are refused until the domain is registered and verified again, with a new verification code and therefore a new TXT value. The domain is shared with the user's organization, so deleting it affects every member.
 
 Import: by domain UUID.
 
@@ -84,7 +91,9 @@ Verifies a domain once its TXT record is published. API: `POST /domains/:id/veri
 |----------|------|----------|-------------|
 | `domain_id` | string | yes | `krakenkey_domain.<name>.id`. Forces a new resource. |
 
-Create calls verify and retries until it passes or the create timeout (default 10 minutes) runs out, to cover DNS propagation. Read reports `verified` from `GET /domains/:id`; if KrakenKey's daily re-check finds the TXT record gone, the domain becomes unverified and the next plan recreates this resource, which verifies again. Delete only removes it from state.
+Create calls verify and retries until it passes or the create timeout (default 10 minutes) runs out, to cover DNS propagation. The API answers 400 when the TXT record is missing or the DNS lookup fails; those are retried, along with 502, 503 and 504. Any other error (401, 403, 404, 402, 429) fails at once. Verify is in the hourly "expensive" rate limit bucket (5 an hour on Free) even when the domain is already verified, so each attempt reads the domain first and skips verify if it is verified, and the wait between attempts starts at 30 seconds and doubles up to 4 minutes. A 10 minute timeout makes at most 5 verify calls. Read reports `verified` from `GET /domains/:id`; if KrakenKey's daily re-check finds the TXT record gone, the domain becomes unverified and the next plan recreates this resource, which verifies again. Delete only removes it from state.
+
+Import: by domain UUID.
 
 ```hcl
 resource "krakenkey_domain_verification" "example" {

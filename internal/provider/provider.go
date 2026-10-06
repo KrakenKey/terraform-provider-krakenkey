@@ -27,11 +27,14 @@ type krakenkeyProvider struct {
 type providerData struct {
 	client       *client.Client
 	pollInterval time.Duration
+	// acmeZone is the zone _acme-challenge CNAMEs point into.
+	acmeZone string
 }
 
 type providerModel struct {
-	APIKey types.String `tfsdk:"api_key"`
-	APIURL types.String `tfsdk:"api_url"`
+	APIKey   types.String `tfsdk:"api_key"`
+	APIURL   types.String `tfsdk:"api_url"`
+	ACMEZone types.String `tfsdk:"acme_zone"`
 }
 
 func New(version string) func() provider.Provider {
@@ -57,6 +60,11 @@ func (p *krakenkeyProvider) Schema(_ context.Context, _ provider.SchemaRequest, 
 			"api_url": schema.StringAttribute{
 				Description: "KrakenKey API base URL. Defaults to KK_API_URL, then " + client.DefaultAPIURL + ".",
 				Optional:    true,
+			},
+			"acme_zone": schema.StringAttribute{
+				Description: "Zone that _acme-challenge CNAME records point into. Defaults to " + stagingACMEZone + " when api_url is " +
+					"https://" + stagingAPIHost + ", otherwise " + defaultACMEZone + ". Set it for any other KrakenKey server.",
+				Optional: true,
 			},
 		},
 	}
@@ -86,6 +94,7 @@ func (p *krakenkeyProvider) Configure(ctx context.Context, req provider.Configur
 	data := &providerData{
 		client:       client.New(apiURL, apiKey, "terraform-provider-krakenkey/"+p.version),
 		pollInterval: p.pollInterval,
+		acmeZone:     acmeZoneFor(apiURL, cfg.ACMEZone.ValueString()),
 	}
 	resp.ResourceData = data
 	resp.DataSourceData = data
@@ -94,6 +103,8 @@ func (p *krakenkeyProvider) Configure(ctx context.Context, req provider.Configur
 func (p *krakenkeyProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewCertificateResource,
+		NewDomainResource,
+		NewDomainVerificationResource,
 	}
 }
 
