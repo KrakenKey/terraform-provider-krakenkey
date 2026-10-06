@@ -10,6 +10,8 @@ import (
 	"github.com/krakenkey/terraform-provider-krakenkey/internal/provider"
 )
 
+//go:generate go tool tfplugindocs generate --provider-name krakenkey
+
 // version is set by the release build.
 var version = "dev"
 
