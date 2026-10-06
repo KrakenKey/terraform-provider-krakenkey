@@ -98,5 +98,7 @@ func (p *krakenkeyProvider) Resources(_ context.Context) []func() resource.Resou
 }
 
 func (p *krakenkeyProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		NewCertificateDataSource,
+	}
 }

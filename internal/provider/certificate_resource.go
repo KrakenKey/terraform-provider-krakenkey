@@ -300,23 +300,47 @@ func (r *certificateResource) apply(ctx context.Context, cert *client.Certificat
 		m.FailureReason = types.StringNull()
 	}
 
-	if cert.Status != client.StatusIssued || cert.CrtPEM == nil {
-		nullIfUnknown(m)
-		return nil
-	}
-	chain, err := r.data.client.GetChain(ctx, cert.ID)
+	issued, err := fetchIssued(ctx, r.data.client, cert)
 	if err != nil {
 		diags.AddError(fmt.Sprintf("Could not read the chain for certificate %d", cert.ID), err.Error())
 		return diags
 	}
-	m.CertPEM = types.StringValue(*cert.CrtPEM)
-	m.ChainPEM = types.StringValue(chain.ChainPEM)
-	m.FullchainPEM = types.StringValue(chain.FullChainPEM)
-	if cert.ExpiresAt != nil {
-		m.ExpiresAt = types.StringValue(cert.ExpiresAt.UTC().Format(time.RFC3339))
-		m.ExpiresAtUnix = types.Int64Value(cert.ExpiresAt.Unix())
+	if issued == nil {
+		nullIfUnknown(m)
+		return nil
+	}
+	m.CertPEM = types.StringValue(issued.certPEM)
+	m.ChainPEM = types.StringValue(issued.chainPEM)
+	m.FullchainPEM = types.StringValue(issued.fullchainPEM)
+	if issued.expiresAt != nil {
+		m.ExpiresAt = types.StringValue(issued.expiresAt.UTC().Format(time.RFC3339))
+		m.ExpiresAtUnix = types.Int64Value(issued.expiresAt.Unix())
 	}
 	return nil
+}
+
+// issuedCert is the PEM material and expiry of an issued certificate.
+type issuedCert struct {
+	certPEM, chainPEM, fullchainPEM string
+	expiresAt                       *time.Time
+}
+
+// fetchIssued reads the chain for a certificate. It returns nil, nil unless the
+// certificate is issued, because the chain endpoint rejects any other status.
+func fetchIssued(ctx context.Context, c *client.Client, cert *client.Certificate) (*issuedCert, error) {
+	if cert.Status != client.StatusIssued || cert.CrtPEM == nil {
+		return nil, nil
+	}
+	chain, err := c.GetChain(ctx, cert.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &issuedCert{
+		certPEM:      *cert.CrtPEM,
+		chainPEM:     chain.ChainPEM,
+		fullchainPEM: chain.FullChainPEM,
+		expiresAt:    cert.ExpiresAt,
+	}, nil
 }
 
 func copyComputed(dst, src *certificateModel) {
