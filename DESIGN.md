@@ -284,7 +284,7 @@ The provider works with a full-access key. For a scoped key, these are the scope
 
 ## Errors from the API
 
-Seen against dev on 2026-10-06. The provider passes the API's message through, so these reach the user as written:
+Seen against the staging API on 2026-10-06. The provider passes the API's message through, so these reach the user as written:
 
 - **Missing scope:** 403, `This API key needs the certs:issue scope for this request.`
 - **Certificate, domain and API key plan limits:** 402, for example `Total active certificate limit reached`. Endpoint and region limits use a body with `code: "plan_limit_exceeded"` instead.

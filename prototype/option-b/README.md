@@ -24,20 +24,20 @@ After each step: no `PRIVATE KEY` in `terraform.tfstate`, in `terraform show -js
 | 4. `key_version = 2` | New key in Vault, new CSR, certificate replaced, deployed secret updated. The old certificate is kept in KrakenKey with a warning, not revoked. The next plan is clean. |
 | 5. Destroy | Everything leaves state; the last certificate is kept in KrakenKey with a warning. The API received no revoke or delete. |
 
-## Real run on dev (2026-10-06)
+## Run against the staging API (2026-10-06)
 
-The same configuration against `https://api-dev.krakenkey.io` with the `ci-test` account, for `ci-test.krakenkey.io`, with `auto_renew = false`. Dev issues from Let's Encrypt staging.
+The same configuration against KrakenKey's staging API, which issues from Let's Encrypt's staging CA, with a test account and domain and `auto_renew = false`.
 
 | Step | Result |
 | --- | --- |
-| Before: key without `certs:issue` | `403: This API key needs the certs:issue scope for this request.` The Vault key and CSR were already created; nothing in KrakenKey. |
-| Before: account at its cap | `402: Total active certificate limit reached.` |
-| 1. Apply | Certificate 18 issued in 50 seconds, `(STAGING)` Let's Encrypt issuer, `DNS:ci-test.krakenkey.io`. It reused the key and CSR left by the failed attempts. |
+| Key without `certs:issue` | `403: This API key needs the certs:issue scope for this request.` The stored key and CSR were already created; nothing was created in KrakenKey. |
+| Account at its certificate limit | `402: Total active certificate limit reached.` |
+| 1. Apply | Certificate issued in 50 seconds by the Let's Encrypt staging CA. It reused the key and CSR left by the failed attempts above. |
 | 2. Plan again | No changes. |
-| 3. `key_version = 2` | Certificate 19 issued in 50 seconds under the new key; 18 kept with a warning. Next plan clean. |
-| 4. Destroy | 19 kept with a warning. Both still `issued`, `autoRenew: false`. |
+| 3. `key_version = 2` | A new certificate issued in 50 seconds under the new key; the previous one kept with a warning. Next plan clean. |
+| 4. Destroy | The last certificate kept with a warning. Both certificates still `issued`, with auto-renew off. |
 
-No private key in state or saved plans at any step; Vault key, CSR, certificate and deployed copy matched each time. The server-side renewal step was only run against the mock: on dev it would have used another issuance from a rate-limited budget.
+No private key in state or saved plans at any step; Vault key, CSR, certificate and deployed copy matched each time. The server-side renewal step was only run against the mock: against a real API it would have used another issuance from a rate-limited budget.
 
 ## What it taught us
 
